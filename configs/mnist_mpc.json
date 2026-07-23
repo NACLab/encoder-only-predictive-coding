@@ -1,0 +1,47 @@
+{
+    "modelType": "mpc",
+    "hyperParameters": {
+        "save_filter_seq": false,
+        "n_iter": 20000,
+        "batch_size": 200,
+        "n_streams0": 6,
+        "n_streams1": 6,
+        "n_streams2": 6,
+        "Na": 2,
+        "foveal_shape": [
+            12,
+            12
+        ],
+        "parafoveal_shape": [
+            18,
+            18
+        ],
+        "peripheral_shape": [
+            24,
+            24
+        ],
+        "Nz1": 49,
+        "Nz2": 49,
+        "eta_intra": 0.001,
+        "eta_inter": 0.001,
+        "eta_lat": 0.001,
+        "eta_div": 1.0,
+        "tau_m": 20.0,
+        "z_decay": 0.0002,
+        "stream_field_sigma": 0.05,
+        "z_gamma": -1.0,
+        "oja_factor": 0.0,
+        "act_fx_model": "relu",
+        "rho_base": 0.05,
+        "inh_base": 0.05,
+        "exc_base": 0.0,
+        "threshold_scale": 1.0,
+        "inh_scale": 1.0,
+        "T": 20,
+        "normalize": true,
+        "input_filter": "none",
+        "input_scale": 1.0,
+        "use_fine_grained_filter": true,
+        "glimpse_policy": "deterministic"
+    }
+}

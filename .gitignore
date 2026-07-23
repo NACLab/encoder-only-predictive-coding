@@ -1,0 +1,11 @@
+*.mp4
+*.npy
+*.npz
+*.pyc
+*.png
+*.jpg
+.idea
+__pycache__/
+exp_out/
+old/
+data/

@@ -62,7 +62,7 @@ Running the above scripts will further, after model training simulation is compl
 analysis scripts; notably, the above will collect/extract latent codes from your trained MPC models and 
 then run a KNN downstream analysis probe to obtain your test generalization ability. 
 
-If you want a t-SNE visualization of your collected latent codes, after the above training script(s) finish, you 
+If you want a t-SNE visualization of your model's collected latent codes, after the above training script(s) finish, you 
 can directly run the following BASH script to produce a latent code visualization:
 ```console
 ./run_tsne.sh 0 mnist mpc 55 ## for trial (seed) 55, run t-SNE, on the MNIST mpc model
@@ -70,7 +70,10 @@ can directly run the following BASH script to produce a latent code visualizatio
 
 which will create a sub-directory called `exp_out/mpc/mnist/55/tsne/`. 
 It is in here that you will find a t-SNE plot of your model's extracted latent codes (as well as a numpy array 
-containing the tSNE embedding codes).
+containing the tSNE embedding codes). 
+<i>Note</i>: for NORB, if you want to visualize MPC's latent codes, create a sub-set of the test-set (with 2000 random samples 
+per class) and use this as the test set for the t-SNE script to visualize to avoid memory issues (since NORB's full 
+test-set is quite large).
 
 ## Citation / Reference
 

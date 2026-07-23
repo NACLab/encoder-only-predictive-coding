@@ -1,17 +1,17 @@
 #!/bin/bash
 
-GPU_ID=1 ## point to a GPU (integer identifier)
+GPU_ID=0 ## point to a GPU (integer identifier)
 DATASET=norb ## dataset to use for simulation
 MODEL=mpc ## model-type to simulate
 CONFIG=configs/norb_mpc.json ## model config file (JSON)
 EXP_DIR=exp_out/
-DATA_DIR=../representational-pc/data/ #../../../data/
+DATA_DIR=data/
 TRAIN_MODEL=1 ## 1 = train model, 0 = do not train model
 COLLECT_LATENTS=1 ## 1 = collect latents, 0 = do not collect latents
 DO_KNN_PROBE=1 ## do KNN probe?
 USE_SPLITS=0
 
-SEEDS=(55 56 57)
+SEEDS=(55)
 
 ## train-time guidelines
 TRAIN_GLIMPSE_POLICY="deterministic" ## NOTE: does nothing

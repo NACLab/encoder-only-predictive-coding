@@ -7,7 +7,7 @@ DATASET=$2 ## dataset to use for simulation
 MODEL=$3 ## model-type to simulate
 CONFIG=$4 ## model config file (JSON)
 EXP_DIR=$5 # "exp_out/"
-DATA_DIR=$6 #"../representational-pc/data" #"../../../data/"
+DATA_DIR=$6 #"data/"
 TRAIN_MODEL=$7 ## 1 = train model, 0 = do not train model
 COLLECT_LATENTS=$8 ## 1 = collect latents, 0 = do not collect latents
 DO_KNN_PROBE=${9} ## do KNN probe?

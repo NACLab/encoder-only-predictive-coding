@@ -37,14 +37,24 @@ To train an MPC circuit model on MNIST, run the following prepared BASH script:
 ./exec_mnist.sh
 ```
 
-To train an MPC circuit model on NORB  (unzip `/data/norb.zip` and place it inside of `/data/`)., run the following 
+To train an MPC circuit model on small NORB  (unzip `/data/norb.zip` and place it inside of `/data/`)., run the following 
 prepared BASH script:
 ```console
 ./exec_norb.sh
 ```
 
-This will train an MPC circuit model on the MNIST/NORB databases for you (on the GPU with identifier 0; 
-if you want to run a different GPU, choose another appropriate integer identifier within the script).
+<i>Note</i>: To use (small) Norb, you either want to re-use/re-purpose your current arrays or use the optional 
+fetching script provided in `data/`; run the script like so:
+```console
+$ cd data/
+$ python fetch_norb.py
+```
+
+This will download and process the small NORB arrays for you, creating the expected `trainX.npy`, `trainY.npy`, 
+`testX.npy`, and `testY.npy` arrays in the sub-folder `data/norb/`.
+
+The above training scripts will simulate an MPC circuit model on the MNIST/NORB databases for you (on the 
+GPU with identifier 0; if you want to run a different GPU, choose another appropriate integer identifier within the script).
 Furthermore, the script will generate the model structure (in ngc-learn JSON format) as well as
 store NPZ files containing your best found parameters during training. 
 All of this will be stored, if you run the script in its default mode (i.e., w/o modifying

@@ -233,14 +233,14 @@ for i in range(n_batches):
     mean_gini += _gini
     if verbose:
         print(
-            f"\r {i} / {n_batches}: Energy = {F/Ns:.4f} Sparsity = {mean_sparsity/(i+1):.4f} "
-            f"Gini.index: {mean_gini/(i+1)}  Max.Lat = {max_val:.4f} ({int(Ns)} samples; {int(Ng)} saccades)",
+            f"\r {i} / {n_batches}: E = {F / Ng:.4f} Sparsity = {mean_sparsity/(i+1):.4f} "
+            f"Gini.index: {mean_gini/(i+1):.4f}  Max.Lat = {max_val:.4f} ({int(Ns)} samples; {int(Ng)} saccades)",
             end=""
         )
     else:
         print(
-            f"\r {i} / {n_batches}: Energy = {F / Ns:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} "
-            f"Gini.index: {mean_gini / (i + 1)}  ({int(Ns)} samples; {int(Ng)} saccades)",
+            f"\r {i} / {n_batches}: E = {F / Ng:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} "
+            f"Gini.index: {mean_gini / (i + 1):.4f}  ({int(Ns)} samples; {int(Ng)} saccades)",
             end=""
         )
 print()

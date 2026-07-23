@@ -43,7 +43,7 @@ for SEED in "${SEEDS[@]}"; do
   fi
 
   ### create local latent code pointers
-  echo "################ $EXP_DIR"
+  #echo "################ $EXP_DIR"
   LAT_DIR="$EXP_DIR/$MODEL/$DATASET/$SEED/"
   LAT_FNAME="$DATASET_POST_TAG""latentsX_$EVAL_GLIMPSE_POLICY""_$EVAL_GLIMPSE_BOUNDS"
   TEST_LAT_FNAME="test_latentsX_$EVAL_GLIMPSE_POLICY""_$EVAL_GLIMPSE_BOUNDS"
@@ -65,9 +65,9 @@ for SEED in "${SEEDS[@]}"; do
   ### collect latents from model
   if [ $COLLECT_LATENTS -eq 1 ]; then
     COMPRESS_LATS=True
-    echo "#################################################"
+    #echo "#################################################"
 
-    echo ">>> Collecting train latents <<<"
+    #echo ">>> Collecting train latents <<<"
     CUDA_VISIBLE_DEVICES=$GPU_ID python extract_dynamic_latents.py --data_fname=$DATAX --exp_dir=$EXP_DIR \
                                                                    --config_fname=$CONFIG \
                                                                    --seed=$SEED --trial_id="$SEED" \
@@ -76,7 +76,7 @@ for SEED in "${SEEDS[@]}"; do
                                                                    --n_glimpses=$EVAL_N_GLIMPSES \
     								   --glimpse_bounds=$EVAL_GLIMPSE_BOUNDS \
                                                                    --glimpse_policy=$EVAL_GLIMPSE_POLICY 
-    echo ">>> Collecting test latents <<<"
+    #echo ">>> Collecting test latents <<<"
     CUDA_VISIBLE_DEVICES=$GPU_ID python extract_dynamic_latents.py --data_fname=$TEST_DATAX --exp_dir=$EXP_DIR \
                                                                    --config_fname=$CONFIG --seed=$SEED --trial_id="$SEED" \
                                                                    --compress_latents=$COMPRESS_LATS \

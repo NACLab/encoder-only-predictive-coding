@@ -1,5 +1,3 @@
 ngcsimlib==3.1.0
 ngclearn==3.1.0
-jax==0.4.28 ## with Cuda12 support
-jaxlib==0.4.28 ## with Cuda12 support
-numpy==2.2.6
+jax[cuda12]==0.4.28

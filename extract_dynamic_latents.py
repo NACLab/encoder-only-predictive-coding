@@ -23,6 +23,7 @@ glimpse_bounds = 0.25 #0.2
 saccade_policy_override = False
 latents_fname = "latentsX"
 glimpse_policy = "random"
+verbose = False
 
 ######################################################################################
 ## read in general program arguments
@@ -76,6 +77,8 @@ for opt, arg in options:
             px = py = 512
     elif opt in ("--exp_dir"):
         exp_dir = arg.strip()
+    elif opt in ("--verbose"):
+        verbose = (arg.strip().lower() == "true")
     elif opt in ("--trial_id"):
         trial_id = arg.strip()
     elif opt in ("--seed"):
@@ -159,9 +162,10 @@ else:
     print(f"Error: unsupported model type ({model_type})")
     exit(1)
 
-print(
-    f"{model.get_param_stats()}"
-)
+if verbose:
+    print(
+        f"{model.get_param_stats()}"
+    )
 W = model.model.get_components("W1").weights.get().T
 
 print(f" >>> Collecting latents over: {data_fname}")
@@ -174,7 +178,7 @@ n_batches = eyeball.images.shape[0] // batch_size #test_data.shape[0] // batch_s
 
 z_codes = []
 latent_distances = []
-Ns = 0
+Ns = Ng = 0 ## number of samples, number of glimpses
 F = mean_sparsity = mean_gini = max_val = 0.
 s_ptr = 0
 e_ptr = batch_size
@@ -184,6 +188,8 @@ for i in range(n_batches):
     s_ptr += batch_size
     e_ptr += batch_size
     eyeball.reset(batch_pointers=batch_ptrs)
+    Ns += batch_ptrs.shape[0]
+
     _sparsity = 0.
     _gini = 0.
     z_i = [] ## latent codes for this series of glimpses
@@ -191,15 +197,11 @@ for i in range(n_batches):
     z_dist = [] ## latent code distances, i.e., D(z_g-1, z_g)
     z_gm1 = None
     for g in range(n_glimpses):
-        # if use_epistemic_saccades:
-        #     x_g, a_g = eyeball.step_epistemic_saccade()
-        # else:
-        #     x_g, a_g = eyeball.step_random_saccade() ## x_g is sensory info, a_g is normalized y-x coordinates
-
         x_g, a_g = eyeball.step_saccade(policy=glimpse_policy)
-        Ns += x_g.shape[0]
+        Ng += x_g.shape[0]
+
         #eyeball.render(output_dir="tmp/")
-        F_j, F_j_batch, z_stats = model.process(
+        r_L, F_j, F_j_batch, z_stats = model.process(
             x_g, action=a_g, adapt_synapses=False
         )
         if "olivetti" in data_fname:
@@ -229,11 +231,18 @@ for i in range(n_batches):
     mean_sparsity += _sparsity
     _gini = _gini/n_glimpses
     mean_gini += _gini
-    print(
-        f"\r {i} > F = {F/Ns:.4f} Sp = {mean_sparsity/(i+1):.4f} "
-        f"Gini: {mean_gini/(i+1)}  Max = {max_val:.4f} ({int(Ns)} samps)",
-        end=""
-    )
+    if verbose:
+        print(
+            f"\r {i} / {n_batches}: Energy = {F/Ns:.4f} Sparsity = {mean_sparsity/(i+1):.4f} "
+            f"Gini.index: {mean_gini/(i+1)}  Max.Lat = {max_val:.4f} ({int(Ns)} samples; {int(Ng)} saccades)",
+            end=""
+        )
+    else:
+        print(
+            f"\r {i} / {n_batches}: Energy = {F / Ns:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} "
+            f"Gini.index: {mean_gini / (i + 1)}  ({int(Ns)} samples; {int(Ng)} saccades)",
+            end=""
+        )
 print()
 mean_sparsity = mean_sparsity/n_batches
 mean_gini = mean_gini / n_batches

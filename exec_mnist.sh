@@ -12,7 +12,7 @@ COLLECT_LATENTS=1 ## 1 = collect latents, 0 = do not collect latents
 DO_KNN_PROBE=1 ## do KNN probe?
 USE_SPLITS=0
 
-SEEDS=(55) #(55 56 57)
+SEEDS=(55 56 57)
 
 ## train-time guidelines
 TRAIN_GLIMPSE_POLICY="deterministic" ## NOTE: does nothing

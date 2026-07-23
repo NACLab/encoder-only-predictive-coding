@@ -1,5 +1,5 @@
 import numpy as np
-from jax import numpy as jnp, random
+from jax import numpy as jnp, random, jit
 from .agent import Agent
 
 from ngclearn import Context, MethodProcess
@@ -10,6 +10,7 @@ from custom_components import RateCodeCell as RateCell, OjaSynapse, FoldiakSynap
 from ngclearn.components import StaticSynapse
 from ngcsimlib.operations import Summation
 from ngclearn.utils.model_utils import eye_wrapped
+
 
 class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the "Agent" construct)
     """
@@ -324,15 +325,20 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         ## calculate approximate (free) energy
         energy = 0.
         energy_batch = 0.
+        energy_internal = 0.
         for l in range(1, self.n_layers):
             e_l = self.model.get_components(f"e{l}")
             e_l_intra = self.model.get_components(f"e{l}_intra")
+            energy_internal += e_l.L.get()
             energy += ( e_l.L.get() + e_l_intra.L.get() )
             energy_batch += ( e_l.L_batch.get() + e_l_intra.L_batch.get() )
             if self.use_cross_stream_syn:
                 e_l_inter = self.model.get_components(f"e{l}_inter")
                 energy += e_l_inter.L.get()
                 energy_batch += e_l_inter.L_batch.get()
+
+        z1 = self.model.get_components("z1").zF.get()
+        W1 = self.model.get_components("W1").weights.get()
 
         ################################################################################################################
         if adapt_synapses: ## do M-step
@@ -343,7 +349,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         for l in range(1, self.n_layers):
             z_codes.append(self.model.get_components(f"z{l}").zF.get())
 
-        return energy, energy_batch, z_codes #[z1.z.get(), z1.zF.get(), z2.z.get(), z2.zF.get()]
+        return energy_internal, energy, energy_batch, z_codes
+
 
     def save_to_disk(self, params_only=False):
         """

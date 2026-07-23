@@ -169,49 +169,70 @@ viz_filters(
 )
 
 energies = []
+F_window = []
+Fint_window = []
+win_len = 100 #50 # 100
 tick = 0
-F = 0.
-Ns = 0
+Fint = F = 0.
+Ns = Ng = 0 ## number samples, number glimpses
 mean_sparsity = 0.
 max_val = 0.
 nblanks = 0
 sim_t = time.time()
 for i in range(n_iter):
     eyeball.reset()
+    Ns += eyeball._image_batch.shape[0]
+
     _sparsity = 0.
+    F_i = Fint_i = 0.
     for g in range(n_glimpses):
         x_g, a_g = eyeball.step_saccade(policy=glimpse_policy)
-        Ns += x_g.shape[0]
+        Ng += x_g.shape[0]
 
         #eyeball.render(output_dir="tmp/", sample_idx=0)
         #exit()
-        F_j, F_j_batch, z_stats = model.process(x_g, action=a_g, adapt_synapses=True)
+        Fint_j, F_j, F_j_batch, z_stats = model.process(x_g, action=a_g, adapt_synapses=True)
         eyeball.update_glimpser(-F_j_batch)
 
         zF2 = z_stats[-1]
         _sparsity = jnp.sum(measure_sparsity(zF2, preserve_batch=False)) + _sparsity
         max_val = float(jnp.maximum(max_val, jnp.max(zF2)))
         nblanks = calc_num_blanks(zF2) + nblanks
-        F = F_j + F
+        F_i = F_j + F_i ## sum raw energies
+        Fint_i = Fint_j + Fint_i
+
+    F_int_i = Fint_i / (n_glimpses * batch_size)
+    Fint_window.append(F_int_i)
+    if len(Fint_window) > win_len:
+        Fint_window.pop(0)
+    Fint = jnp.mean(jnp.array(Fint_window))
+
+    F_i = F_i/(n_glimpses * batch_size)
+    F_window.append(F_i)
+    if len(F_window) > win_len:
+        F_window.pop(0)
+    F = jnp.mean(jnp.array(F_window))
+
 
     _sparsity = _sparsity/n_glimpses
     mean_sparsity += _sparsity
     if verbose:
         print(
-            f"\r {i}/{n_iter}: Energy = {F / Ns:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} "
-            f"Max.Lat = {max_val:.4f} Nblanks: {nblanks} ({int(Ns)} samples)",
+            f"\r {i}/{n_iter}: E(in) = {Fint:.4f} E = {F:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} "
+            f"Max.Lat = {max_val:.4f} Nblanks: {nblanks} ({int(Ns)} samples; {int(Ng)} saccades)",
             end=""
         )
     else:
         print(
-            f"\r {i}/{n_iter}: Energy = {F / Ns:.4f} Sparsity = {mean_sparsity / (i + 1):.4f} ({int(Ns)} samples)",
+            f"\r {i}/{n_iter}: E(in) = {Fint:.4f} E = {F:.4f} "
+            f"Sparsity = {mean_sparsity / (i + 1):.4f} ({int(Ns)} samples; {int(Ng)} saccades)",
             end=""
         )
 
     if i > 0 and i % probe_mod == 0: #if Ns % probe_mod == 0:
         if verbose:
             print()
-        energies.append(F/Ns)
+        energies.append(F) #energies.append(F/Ng)
         tick += 1
         if verbose:
             print("+++++++++++++++++++\n", model.get_param_stats(), "\n+++++++++++++++++++")
@@ -237,7 +258,7 @@ if _trial is not None:
     _trial["train_time_in_sec"] = sim_t
     if Ns <= 0.:
         Ns = 1.
-    _trial["train_energy_in_nats"] = float(jnp.round(F/Ns, 4))
+    _trial["train_energy_in_nats"] = float(jnp.round(F, 4))
     config[f"{seed}"] = _trial
 ## save updated trial / config dictionary
 with open(config_fname, "w", encoding="utf-8") as out_fd:

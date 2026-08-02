@@ -522,18 +522,19 @@ def build_modif(
     ####################################################################################################################
     ## Cross-stream synapses setup
     ## NOTE: el_inter will be weighted by `stream_field_sigma`
-    _bands = bands
-    C_T_M = jnp.ones((1,1))
+    _bands = bands * 0
+    C_T_M = jnp.ones((1,1)) * 0
     if stream_field_sigma > 0.0:
-        ## calculate global weights applied to inter-stream synapses
+        ###
+        ## calculate global topological weights applied to inter-stream synapses
+        ## NOTE: we omit main diagonal b/c intra-stream synapses take care of this
         C_T_M = 0.
-        k0 = 0  ## center-point of stream topology
+        k0 = 0  ## center-point of stream (Hollow-matrix) topology
         _accum = 0.0 ## accumulation stream weights should approach/asymptote to 1.0
         weight_base = 0.5
-        for k in range(1, n_streams):  ## this will create a full topology for all K streams
+        for k in range(1, n_streams):  ## this will create a ring-like topology for all K streams
             band_k = eye_wrapped(N=n_streams, k=k, values=jnp.ones((n_streams,)))
-            # weight_k = jnp.exp(-((k - k0) ** 2) * (1. / (2 * sigSqr))) * 1./(jnp.sqrt(2. * jnp.pi * sigSqr))
-            weight_k = jnp.power(weight_base, int(k - k0))
+            weight_k = jnp.power(weight_base, int(k - k0)) 
             _accum += weight_k
             cross_stream_mask_k = create_group_matrix(  ## mask
                 band_k,
@@ -541,7 +542,8 @@ def build_modif(
             ) * weight_k  ## band block-matrix means inter-stream predictions
             C_T_M = cross_stream_mask_k + C_T_M
             _bands += band_k * weight_k
-        jnp.set_printoptions(precision=3, suppress=True)
+        #jnp.set_printoptions(precision=3, suppress=True)
+        ###
 
     R_l_inter = OjaSynapse(  ## (inter)cross-stream prediction synapses from layer l to l
         name=f"R{l}_inter",

@@ -20,8 +20,8 @@ makedir(exp_dir)
 data_fname = f"../../../data/mnist/trainX.npy"
 dataset = "mnist"
 px = py = 28
-glimpse_bounds = 0.25 #0.2
-n_glimpses = 10 #8 #5 #4
+glimpse_bounds = 0.25 
+n_glimpses = 10
 verbose = False
 
 ######################################################################################

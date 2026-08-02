@@ -77,7 +77,7 @@ class OjaSynapse(DenseSynapse):
     @compilable
     def advance_state(self):
         weights = self.weights.get()  # * self.mask.get()
-        self.outputs.set((jnp.matmul(self.inputs.get(), weights) * self.resist_scale) + self.biases.get())
+        self.outputs.set((jnp.matmul(self.inputs.get(), weights) * self.Rscale) + self.biases.get())
 
     @staticmethod
     def _normalize(weights, norm_axis, use_block_norm, block_shape, norm_target=1., norm_order=2):

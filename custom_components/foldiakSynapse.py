@@ -79,7 +79,7 @@ class FoldiakSynapse(DenseSynapse):
         inh_scale = self.inh_scale
         ## NOTE: the output of a Foldiak synaptic projection is negative (to serve as inhibitory pressure)
         self.outputs.set(
-            (jnp.matmul(inputs, weights) * self.resist_scale) * inh_scale +
+            (jnp.matmul(inputs, weights) * self.Rscale) * inh_scale +
             thresholds * self.threshold_scale * inh_scale
         )
 

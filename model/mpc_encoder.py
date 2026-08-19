@@ -499,7 +499,7 @@ def build_modif(
     R_l_intra = OjaSynapse(  ## intra-stream prediction synapses from layer l to l
         name=f"R{l}_intra",
         shape=(z_l.n_units, z_l.n_units),
-        eta=eta_inter * batch_size,
+        eta=eta_intra * batch_size,
         stability_factor=oja_factor,
         use_block_norm=True,
         block_shape=block_shape_R,

@@ -1,7 +1,7 @@
 from jax import random, numpy as jnp, jit
 
-from ngclearn import compilable  # from ngcsimlib.parser import compilable
-from ngclearn import Compartment  # from ngcsimlib.compartment import Compartment
+from ngclearn import compilable
+from ngclearn import Compartment
 from ngclearn.components.synapses import DenseSynapse
 
 
@@ -79,8 +79,7 @@ class FoldiakSynapse(DenseSynapse):
         inh_scale = self.inh_scale
         ## NOTE: the output of a Foldiak synaptic projection is negative (to serve as inhibitory pressure)
         self.outputs.set(
-            (jnp.matmul(inputs, weights) * self.Rscale) * inh_scale +
-            thresholds * self.threshold_scale * inh_scale
+            (jnp.matmul(inputs, weights) * self.Rscale) * inh_scale + thresholds * self.threshold_scale * inh_scale
         )
 
     @compilable

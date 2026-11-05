@@ -457,6 +457,30 @@ def build_modif(
     )
     ####################################################################################################################
     ## intra-stream prediction synapses setup
+
+    # nlm1_streams = 0
+    # nl_streams = 1
+    # _W_1 = TensorOjaSynapse(  ## encoding synapses from layer l-1 to l
+    #     name=f"W1",
+    #     n_in_streams=nlm1_streams,
+    #     K_local=Nz_lm1,
+    #     O_local=Nz_l,
+    #     P_l=1,
+    #     stride=1,
+    #     convergent_factor=0.,
+    #     dilation=1,
+    #     eta=eta_intra,  # * batch_size,
+    #     oja_factor=oja_factor,
+    #     normalize=True,
+    #     norm_axis=1,
+    #     langevin_decay=0., #0.05
+    #     langevin_temperature=0.001,
+    #     weight_init=dist.gaussian(mean=0., std=w_scale),
+    #     key=subkeys[0],
+    #     batch_size=batch_size,
+    #     use_block_matrix_format=True
+    # )
+
     W_l = OjaSynapse(  ## encoding synapses from layer l-1 to l
         name=f"W{l}",
         shape=(z_lm1.n_units, z_l.n_units),

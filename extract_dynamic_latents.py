@@ -142,15 +142,6 @@ eyeball = LGN_Glimpser(
     max_saccades=n_glimpses 
 )
 print(" DATA.SOURCE.shape = ", eyeball.images.shape)
-chunk_size = -1 ## TODO: use this parameter to process data from disk?
-if eyeball.images.shape[0] > 10000:
-    chunk_size = 5000
-## latent code aggregator
-aggregator = LatentAggregator(
-    key,
-    mode="grid_cell",
-    compress_latents=compress_latents
-)
 
 if "mpc" in model_type:
     model: Agent = MPCEncoder(
@@ -167,6 +158,20 @@ if verbose:
         f"{model.get_param_stats()}"
     )
 W = model.model.get_components("W1").weights.get().T
+
+lat_dim = model.model.get_components("z2").n_units
+chunk_size = -1 ## TODO: use this parameter to process data from disk?
+if eyeball.images.shape[0] > 10000:
+    chunk_size = 5000
+## latent code aggregator
+aggregator = LatentAggregator(
+    key,
+    mode="grid_cell",
+    compress_latents=compress_latents,
+    latent_feature_dim=lat_dim,
+    batch_size=batch_size
+)
+
 
 print(f" >>> Collecting latents over: {data_fname}")
 test_data = jnp.load(data_fname)

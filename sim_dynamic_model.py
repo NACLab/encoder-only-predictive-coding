@@ -149,11 +149,13 @@ else:
     print(f"Error: unsupported model type ({model_type})")
     exit(1)
 model.save_to_disk()
-## NOTE: do I want to do this? or maybe just always override current trial record
 if config.get(f"{seed}") is None:
     config.setdefault(
         f"{seed}", {"modelDir" : model_dir}
     )
+    ## save updated trial / config dictionary
+    with open(config_fname, "w", encoding="utf-8") as out_fd:
+        json.dump(config, out_fd, indent=4)
 
 if verbose:
     print("+++++++++++++++++++\n", model.get_param_stats(), "\n+++++++++++++++++++")

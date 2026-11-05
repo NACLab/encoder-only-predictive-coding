@@ -376,6 +376,7 @@ class LGN_Glimpser():
             self.stat_type = 0 ## this auto-sets to 0
             self.normalize_patches = True #False  ## normalize patches by Frobenius norm?
 
+        self.foveal_offsets = self.parafoveal_offsets = self.peripheral_offsets = None
         if self.glimpse_setup == 0:
             self.foveal_offsets = jnp.array(  ## overlapped ring structures
                 [
@@ -403,15 +404,18 @@ class LGN_Glimpser():
                 ],
                 dtype=jnp.float32
             ) * self.foveal_shift  # - 0.01
-            self.parafoveal_offsets = jnp.array(
-                [[0., 0.]]
-            )
-            self.peripheral_offsets = jnp.array(
-                [[0., 0.]]
-            )
             nfovea = self.foveal_offsets.shape[0]
-            npfovea = self.parafoveal_offsets.shape[0]
-            nperi = self.peripheral_offsets.shape[0]
+            npfovea = nperi = 0
+            if self.parafoveal_shape is not None:
+                self.parafoveal_offsets = jnp.array(
+                    [[0., 0.]]
+                )
+                npfovea = self.parafoveal_offsets.shape[0]
+            if self.peripheral_shape is not None:
+                self.peripheral_offsets = jnp.array(
+                    [[0., 0.]]
+                )
+                nperi = self.peripheral_offsets.shape[0]
 
         self.n_streams = nfovea + npfovea + nperi
 

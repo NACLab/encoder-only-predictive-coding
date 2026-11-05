@@ -81,15 +81,6 @@ def measure_SSIM(
     ## reduce across spatial & channel dimensions => 1D vector of batch scores
     return jnp.mean( jnp.mean(ssim_map, axis=(1, 2, 3)) )
 
-## internal Gaussian kernel (2D only)
-def _calc_gaussian_kernel_2D(sigma: float, radius: int) -> jnp.ndarray:
-    x = jnp.arange(-radius, radius + 1)
-    xx, yy = jnp.meshgrid(x, x)
-    kernel = jnp.exp(-0.5 * (xx ** 2 + yy ** 2) / sigma ** 2)
-    kernel = kernel / jnp.sum(kernel)
-    return kernel[jnp.newaxis, jnp.newaxis, :, :]
-
-
 @partial(jit, static_argnums=[1, 2])
 def lateral_inhibition_filter(
         saliency_map: jnp.ndarray,
@@ -115,6 +106,13 @@ def lateral_inhibition_filter(
     thinned_saliency = jnp.where(is_peak, saliency_map, 0.0)
     return thinned_saliency
 
+## internal Gaussian kernel (2D only)
+def _calc_gaussian_kernel_2D(sigma: float, radius: int) -> jnp.ndarray:
+    x = jnp.arange(-radius, radius + 1)
+    xx, yy = jnp.meshgrid(x, x)
+    kernel = jnp.exp(-0.5 * (xx ** 2 + yy ** 2) / sigma ** 2)
+    kernel = kernel / jnp.sum(kernel)
+    return kernel[jnp.newaxis, jnp.newaxis, :, :]
 
 @partial(jit, static_argnums=[3, 4, 5, 9, 10])
 def lgn_map_filter( ## LGN filter co-routine

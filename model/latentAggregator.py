@@ -82,72 +82,6 @@ def create_global_spatial_codes( #compress_codes
     ], axis=-1)
     return global_code
 
-@partial(jit, static_argnums=[2])
-def create_global_grid_cell_codes(
-        glimpse_features,
-        coordinates,
-        num_frequencies=6 #5 #4
-):
-    """
-    Creates global vector by projecting coordinates into grid-cell-like periodic phases.
-
-    Args:
-        glimpse_features:  tensor of shape (B, T, D) representing latents
-
-        coordinates: tensor of shape (B, T, 2) representing continuous (y, x) positions in range [-1, 1]
-
-        num_frequencies: integer controlling the number of geometric frequency scales;
-            this must be static/constant across runs
-
-    Returns:
-        a 1D global representation array
-    """
-    n_glimpses = glimpse_features.shape[1] ## get num glimpses
-
-    mean_code = jnp.mean(glimpse_features, axis=1)
-    #max_code = jnp.max(glimpse_features, axis=1)
-    std_code = jnp.std(glimpse_features, axis=1)
-    mean_code = mean_code / (jnp.linalg.norm(mean_code, axis=-1, keepdims=True) + 1e-8)
-    #max_code = max_code / (jnp.linalg.norm(max_code, axis=-1, keepdims=True) + 1e-8)
-    std_code = std_code / (jnp.linalg.norm(std_code, axis=-1, keepdims=True) + 1e-8)
-
-    ## dynamically generate geometric frequencies: [1.0, 2.0, 4.0, 8.0, 16.0, ...]
-    powers = jnp.arange(num_frequencies, dtype=jnp.float32)
-    frequencies = (2.0 ** powers) * jnp.pi  # Shape: (num_frequencies,)
-    ## broadcast & compute spatial frequencies
-    # (B, T, 2, 1) * (num_frequencies,) -> (B, T, 2, num_frequencies)
-    phase_angles = coordinates[..., None] * frequencies
-    sin_phases = jnp.sin(phase_angles)
-    cos_phases = jnp.cos(phase_angles)
-
-    ## flatten periodic coordinates to shape: (B, T, 2 * num_frequencies * 2)
-    ### e.g., for num_frequencies=5, grid_dims = 2 * 5 * 2 = 20 dimensions per feature channel.
-    grid_dims = 2 * num_frequencies * 2
-    grid_coordinates = jnp.concatenate([sin_phases, cos_phases], axis=-1).reshape(
-        (coordinates.shape[0], n_glimpses, grid_dims)
-    )
-    ## compute feature weight distributions
-    feature_weights = jnp.abs(glimpse_features)
-    weight_denom = jnp.sum(feature_weights, axis=1, keepdims=True) + 1e-8
-    normalized_weights = feature_weights / weight_denom
-    ## compute phase-centroids (via Einstein summation)
-    ### contract batch-time-feature and batch-time-phase into batch-feature-phase
-    grid_centroids = jnp.einsum('btf,btp->bfp', normalized_weights, grid_coordinates)
-    grid_centroids_flat = grid_centroids.reshape((glimpse_features.shape[0], -1))
-    grid_centroids_flat = grid_centroids_flat / (jnp.linalg.norm(grid_centroids_flat, axis=-1, keepdims=True) + 1e-8)
-
-    ## final output global code creation
-    global_code = jnp.concatenate(
-        [
-            mean_code,
-            #max_code,
-            std_code,
-            grid_centroids_flat
-        ],
-        axis=-1
-    )
-    return global_code
-
 @jit
 def create_global_attention_code(
         glimpse_features,
@@ -219,6 +153,72 @@ def create_global_attention_code(
     ], axis=-1)  # Total: 1080 dims
 
     return global_codes
+
+@partial(jit, static_argnums=[2])
+def create_global_grid_cell_codes(
+        glimpse_features,
+        coordinates,
+        num_frequencies=6 #5 #4
+):
+    """
+    Creates global vector by projecting coordinates into grid-cell-like periodic phases.
+
+    Args:
+        glimpse_features:  tensor of shape (B, T, D) representing latents
+
+        coordinates: tensor of shape (B, T, 2) representing continuous (y, x) positions in range [-1, 1]
+
+        num_frequencies: integer controlling the number of geometric frequency scales;
+            this must be static/constant across runs
+
+    Returns:
+        a 1D global representation array
+    """
+    n_glimpses = glimpse_features.shape[1] ## get num glimpses
+
+    mean_code = jnp.mean(glimpse_features, axis=1)
+    #max_code = jnp.max(glimpse_features, axis=1)
+    std_code = jnp.std(glimpse_features, axis=1)
+    mean_code = mean_code / (jnp.linalg.norm(mean_code, axis=-1, keepdims=True) + 1e-8)
+    #max_code = max_code / (jnp.linalg.norm(max_code, axis=-1, keepdims=True) + 1e-8)
+    std_code = std_code / (jnp.linalg.norm(std_code, axis=-1, keepdims=True) + 1e-8)
+
+    ## dynamically generate geometric frequencies: [1.0, 2.0, 4.0, 8.0, 16.0, ...]
+    powers = jnp.arange(num_frequencies, dtype=jnp.float32)
+    frequencies = (2.0 ** powers) * jnp.pi  # Shape: (num_frequencies,)
+    ## broadcast & compute spatial frequencies
+    # (B, T, 2, 1) * (num_frequencies,) -> (B, T, 2, num_frequencies)
+    phase_angles = coordinates[..., None] * frequencies
+    sin_phases = jnp.sin(phase_angles)
+    cos_phases = jnp.cos(phase_angles)
+
+    ## flatten periodic coordinates to shape: (B, T, 2 * num_frequencies * 2)
+    ### e.g., for num_frequencies=5, grid_dims = 2 * 5 * 2 = 20 dimensions per feature channel.
+    grid_dims = 2 * num_frequencies * 2
+    grid_coordinates = jnp.concatenate([sin_phases, cos_phases], axis=-1).reshape(
+        (coordinates.shape[0], n_glimpses, grid_dims)
+    )
+    ## compute feature weight distributions
+    feature_weights = jnp.abs(glimpse_features)
+    weight_denom = jnp.sum(feature_weights, axis=1, keepdims=True) + 1e-8
+    normalized_weights = feature_weights / weight_denom
+    ## compute phase-centroids (via Einstein summation)
+    ### contract batch-time-feature and batch-time-phase into batch-feature-phase
+    grid_centroids = jnp.einsum('btf,btp->bfp', normalized_weights, grid_coordinates)
+    grid_centroids_flat = grid_centroids.reshape((glimpse_features.shape[0], -1))
+    grid_centroids_flat = grid_centroids_flat / (jnp.linalg.norm(grid_centroids_flat, axis=-1, keepdims=True) + 1e-8)
+
+    ## final output global code creation
+    global_code = jnp.concatenate(
+        [
+            mean_code,
+            #max_code,
+            std_code,
+            grid_centroids_flat
+        ],
+        axis=-1
+    )
+    return global_code
 
 class LatentAggregator(): ## crafts global latent codes from glimpses
 

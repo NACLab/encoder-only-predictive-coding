@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from jax import numpy as jnp, random, jit
 from .agent import Agent
@@ -6,7 +7,7 @@ from ngclearn import Context, MethodProcess
 from ngcsimlib.global_state import stateManager
 from ngclearn.utils.model_utils import create_block_matrix as create_group_matrix
 from ngclearn.utils.distribution_generator import DistributionGenerator as dist
-from custom_components import RateCodeCell as RateCell, OjaSynapse, FoldiakSynapse, GaussianErrorCell as ErrorCell
+from custom_components import RateCodeCell as RateCell, OjaSynapse, FoldiakSynapse, GaussianErrorCell as ErrorCell, LGNUnitCell, GridRateCell
 from ngclearn.components import StaticSynapse
 from ngcsimlib.operations import Summation
 from ngclearn.utils.model_utils import eye_wrapped
@@ -41,7 +42,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
             self.use_cross_stream_syn = True
 
         self.n_layers = 3 ## sensory + latent layers
-        self.param_names = ["W1", "W2", "V1", "V2", "R1_intra", "R2_intra"]
+        self.param_names = ["W1", "W2", "V1", "V2", "R1_intra", "R2_intra", "G1", "G2"]
         if self.use_action_syn:
             self.param_names = self.param_names + ["A1", "A2"]
         if self.use_cross_stream_syn:
@@ -102,6 +103,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         ## random distillation target factor: < 0 disables this
         self.z_gamma = float(model_config.get("hyperParameters").get("z_gamma"))
 
+        self.use_lgn = True #False
+
         n_z0 = Nz0 * n_streams0  ## full dimensionality of input
         n_z1 = Nz1 * n_streams1
         n_z2 = Nz2 * n_streams2
@@ -130,16 +133,43 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     n_units=Na,
                     batch_size=batch_size
                 )
-                z0 = RateCell(  ## z0
-                    name="z0",
-                    tau_m=0.,
-                    n_units=Nz0 * n_streams1,
+                ## TODO: create global grid-cell component here
+                grid_cells = GridRateCell(
+                    name="grid_cells",
+                    latent_feature_dim=Nz2 * n_streams2,
+                    num_frequencies=6,
                     batch_size=batch_size
                 )
+                Ngrid = grid_cells.n_units
+
+                if not self.use_lgn:
+                    z0 = RateCell(  ## z0
+                        name="z0",
+                        tau_m=0.,
+                        n_units=Nz0 * n_streams1,
+                        batch_size=batch_size
+                    )
+                else:
+                    # Assume 'my_glimpser_list' is a list of length P containing (B, C, H, W) arrays
+                    px0 = int(math.sqrt(Nz0)) ## patches assumed to be square (H=W)
+                    z0 = LGNUnitCell( #lgn_layer
+                        name="z0",
+                        n_patches=n_streams1, #144,
+                        patch_shape=(1, px0, px0), ## only 1 channel (C=1)
+                        batch_size=batch_size
+                    )
+                    '''
+                    # 1. Pipe the list into the cell (performs the structural JAX stacking)
+                    lgn_layer.inputs_from_list(my_glimpser_list)
+                    # 2. Advance the state (computes parallel convolving and divisive normalizations)
+                    lgn_layer.advance_state(dt=1.0)
+                    # 3. Pull the flattened form to drive your V1 cortical layer!
+                    v1_driving_matrix = lgn_layer.y_flat.get()  # Shape: (200, 144 * 1 * 14 * 14) = (200, 28224)
+                    '''
 
                 ## build motif for layer z1
                 hyperparams1 = (
-                    n_streams1, Nz0, Nz1, Na, tau_m, z_decay, w_scale, inh_1, exc_1, rho_1, inh1_bound, eta_intra,
+                    n_streams1, Nz0, Nz1, Na, Ngrid, tau_m, z_decay, w_scale, inh_1, exc_1, rho_1, inh1_bound, eta_intra,
                     eta_inter, batch_size, eta_lat, oja_factor, ensemble_scale, act1_model, threshold_scale,
                     normalize, stream_field_sigma
                 )
@@ -153,11 +183,11 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     hyperparams=hyperparams1
                 )
                 q1, Q1, t1 = projection1
-                z1, e1, e1_intra, e1_inter, W1, E1, R1_intra, ER1_intra, R1_inter, ER1_inter, V1, A1 = dynamics1
+                z1, e1, e1_intra, e1_inter, W1, E1, R1_intra, ER1_intra, R1_inter, ER1_inter, V1, A1, G1 = dynamics1
 
                 ## build motif for layer z2
                 hyperparams2 = (
-                    n_streams2, Nz1, Nz2, Na, tau_m, z_decay, w_scale, inh_2, exc_2, rho_2, inh2_bound,
+                    n_streams2, Nz1, Nz2, Na, Ngrid, tau_m, z_decay, w_scale, inh_2, exc_2, rho_2, inh2_bound,
                     eta_intra / eta_div, eta_inter / eta_div, batch_size, eta_lat / eta_div, oja_factor,
                     ensemble_scale, act2_model, threshold_scale, normalize, stream_field_sigma
                 )
@@ -171,7 +201,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     hyperparams=hyperparams2
                 )
                 q2, Q2, t2 = projection2
-                z2, e2, e2_intra, e2_inter, W2, E2, R2_intra, ER2_intra, R2_inter, ER2_inter, V2, A2 = dynamics2
+                z2, e2, e2_intra, e2_inter, W2, E2, R2_intra, ER2_intra, R2_inter, ER2_inter, V2, A2, G2 = dynamics2
+
 
                 ## globally wire-up the layers
                 projection_motifs = [projection1, projection2]
@@ -179,6 +210,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 wire_motifs(
                     z0,
                     a,
+                    grid_cells,
                     projection_motifs,
                     dynamics_motifs,
                     z_gamma=self.z_gamma,
@@ -187,8 +219,9 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     inter_predict_innovation=self.inter_predict_innovation
                 )
                 ## set up command execution path
-                evolve_chain = [W1, R1_intra, V1, W2, R2_intra, V2] #, CR1, CR2, A1, A2]
-                infer_chain = [z0, Q1, q1, Q2, q2]
+                grid_cell_chain = [grid_cells]
+                evolve_chain = [W1, R1_intra, V1, W2, R2_intra, V2, G1, G2]
+                infer_chain = [G1, G2, z0, Q1, q1, Q2, q2]
                 if self.use_cross_stream_syn:
                     advance_chain = [
                         V1, ER1_intra, ER1_inter, V2, E2, ER2_intra, ER2_inter,
@@ -210,8 +243,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 reset_chain = [
                     z0, z1, z2, q1, q2,
                     e1, e2, e1_intra, e2_intra,
-                    Q1, Q2, W1, W2, R1_intra, R2_intra, V1, V2,
-                    E1, E2, ER1_intra, ER2_intra
+                    Q1, Q2, W1, W2, R1_intra, R2_intra, V1, V2, G1, G2,
+                    E1, E2, ER1_intra, ER2_intra #, grid_cells
                 ]
                 if self.use_action_syn:
                     evolve_chain = evolve_chain + [A1, A2]
@@ -221,11 +254,11 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     evolve_chain = evolve_chain + [R1_inter, R2_inter]
                     reset_chain = reset_chain + [e1_inter, e2_inter, R1_inter, R2_inter, ER1_inter, ER2_inter]
 
-                ## Set up command flow
+                ## Set up command flow (processes)
                 self.evolve = MethodProcess("evolve_proc")
                 for node in evolve_chain:
                     self.evolve >> node.evolve
-                self.infer = MethodProcess("infer_proc")
+                self.infer = MethodProcess("infer_proc") #, use_jit=False)
                 for node in infer_chain:
                     self.infer >> node.advance_state
                 self.advance = MethodProcess("advance_proc") #, use_jit=False)
@@ -234,6 +267,13 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 self.reset = MethodProcess("reset_proc")
                 for node in reset_chain:
                     self.reset >> node.reset
+                ## grid-cells get updated and cleared on their own time-scale
+                self.update_scene_code = MethodProcess("update_scene_code_proc")
+                for node in grid_cell_chain:
+                    self.update_scene_code >> node.advance_state
+                self.clear_scene_code = MethodProcess("clear_scene_code_proc")
+                for node in grid_cell_chain:
+                    self.clear_scene_code >> node.reset
 
         self.params = self.model.get_components(*self.param_names)
 
@@ -250,7 +290,20 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 out_str = stats
         return out_str
 
+    def reset_scene_level_gridcells(self):
+        self.clear_scene_code.run() #t=1. * self.dt, dt=self.dt)
+
     def process(self, x, action=None, adapt_synapses=False):
+
+        x_data = x
+        # if self.use_lgn: ## LGN
+        #     #print(x_data[0].shape, " ", len(x_data))
+        #     #x_data = jnp.stack(x_data, axis=1) ## yields 5D tensor
+        #     print(x_data.shape)
+        #     exit()
+        # else: ## no LGN
+        #     x_data = jnp.concat(x_data, axis=1) ## yields concatenated 4D tensor
+
         self.reset.run()  # batch_size=x.shape[0])
         ## get input nodes
         a = self.model.get_components("a")
@@ -283,7 +336,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 W_l = self.model.get_components(f"W{l}")
                 Q_l.weights.set(W_l.initial_weights.get())
 
-            z0.j.set(x)
+            z0.j.set(x_data)
             self.infer.run(t=1. * self.dt, dt=self.dt)
             for l in range(1, self.n_layers):
                 q_l = self.model.get_components(f"q{l}")
@@ -299,7 +352,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
             Q_l = self.model.get_components(f"Q{l}")
             W_l = self.model.get_components(f"W{l}")
             Q_l.weights.set(W_l.weights.get())
-        z0.j.set(x)
+        z0.j.set(x_data)
         self.infer.run(t=1. * self.dt, dt=self.dt)
         for l in range(1, self.n_layers):
             z_l = self.model.get_components(f"z{l}")
@@ -320,6 +373,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         ## run iterative settling (E-steps) to get activities
         inputs = jnp.array(self.advance.pack_rows(self.T, t=lambda x: x, dt=self.dt))
         stateManager.state, outputs = self.advance.scan(inputs)  ## outputs[0]
+
+        self.update_scene_code.run(t=self.T, dt=self.dt)
 
         ################################################################################################################
         ## calculate approximate (free) energy
@@ -389,6 +444,8 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         self.reset = processes.get("reset_proc")
         self.evolve = processes.get("evolve_proc")
         self.infer = processes.get("infer_proc")
+        self.update_scene_code = processes.get("update_scene_code_proc")
+        self.clear_scene_code = processes.get("clear_scene_code_proc")
         self.params = self.model.get_components(*self.param_names)
 
 def build_modif(
@@ -400,8 +457,8 @@ def build_modif(
         stream_mask,
         hyperparams
 ):  ## sub-circuit motif creation co-routine
-    _, *subkeys = random.split(dkey, 5)
-    (n_streams, Nz_lm1, Nz_l, Na, tau, z_decay, w_scale, inh_0, exc_0, rho,
+    _, *subkeys = random.split(dkey, 6)
+    (n_streams, Nz_lm1, Nz_l, Na, Ngrid, tau, z_decay, w_scale, inh_0, exc_0, rho,
      inh_bound, eta_intra, eta_inter, batch_size, eta_lat, oja_factor,
      ensemble_scale, act_model, threshold_scale, normalize, stream_field_sigma) = hyperparams
     block_shape_W, block_shape_R = block_shapes
@@ -625,8 +682,8 @@ def build_modif(
             key=subkeys[3],
             batch_size=batch_size
         )
-
-    A_l = OjaSynapse(  ## action-conditional prediction synapses from action to layer l
+    ## action-conditional prediction synapses from action to layer l
+    A_l = OjaSynapse(
         name=f"A{l}",
         shape=(Na, z_l.n_units),
         eta=eta_intra * batch_size,
@@ -638,17 +695,31 @@ def build_modif(
         key=subkeys[3],
         batch_size=batch_size
     )
+    ## context-conditional prediction synapses from grid-cells to layer l
+    G_l = OjaSynapse(
+        name=f"G{l}",
+        shape=(Ngrid, z_l.n_units),
+        eta=eta_intra * batch_size,
+        stability_factor=oja_factor,
+        normalize=normalize,
+        use_block_norm=False,
+        resist_scale=1.,
+        weight_init=dist.gaussian(mean=0., std=w_scale),
+        key=subkeys[4],
+        batch_size=batch_size
+    )
 
     ## just package nodes into lists for external wiring w/in model context
     projection_nodes = (q_l, Q_l, t_l)
     dynamics_nodes = (
-        z_l, e_l, e_l_intra, e_l_inter, W_l, E_l, R_l_intra, ER_l_intra, R_l_inter, ER_l_inter, V_l, A_l
+        z_l, e_l, e_l_intra, e_l_inter, W_l, E_l, R_l_intra, ER_l_intra, R_l_inter, ER_l_inter, V_l, A_l, G_l
     )
     return projection_nodes, dynamics_nodes
 
 def wire_motifs(
         z0,
-        a,
+        a, ## action top-down context node
+        grid_cells, ## grid-cell global context/scene node
         projection_motifs,
         dynamics_motifs,
         z_gamma=-1.,
@@ -657,27 +728,30 @@ def wire_motifs(
         inter_predict_innovation=False
 ):
     ############################################################################
+    a.zF >> grid_cells.coordinate ## action (coordinates) feeds into grid-cells
+
     qlm1 = zlm1 = z0  ## NOTE: seed nodes are same for projection & dynamics circuits
     for l in range(len(dynamics_motifs)):  ## go from lyr 0 to L-1
         ql, Ql, tl = projection_motifs[l]
-        zl, el, el_intra, el_inter, Wl, El, Rl_intra, ERl_intra, Rl_inter, ERl_inter, Vl, Al = dynamics_motifs[l]
+        zl, el, el_intra, el_inter, Wl, El, Rl_intra, ERl_intra, Rl_inter, ERl_inter, Vl, Al, Gl = dynamics_motifs[l]
 
         ## Wire signal pathways
 
         ### infernece/projection step
         qlm1.zF >> Ql.inputs
+        grid_cells.global_code >> Gl.inputs
         if use_action_syn:
             a.zF >> Al.inputs
-            Summation(Ql.outputs, Al.outputs) >> ql.j
+            Summation(Ql.outputs, Al.outputs, Gl.outputs) >> ql.j
         else:
-            Ql.outputs >> ql.j
+            Summation(Ql.outputs, Gl.outputs) >> ql.j
 
         ### dynamics/E-step
         zlm1.zF >> Wl.inputs
         if use_action_syn:
-            Summation(Wl.outputs, Al.outputs) >> el.mu
+            Summation(Wl.outputs, Al.outputs, Gl.outputs) >> el.mu
         else:
-            Wl.outputs >> el.mu
+            Summation(Wl.outputs, Gl.outputs) >> el.mu
         zl.z >> el.target
         zl.zF_prior >> Rl_intra.inputs
         Rl_intra.outputs >> el_intra.mu ## intra-predictions
@@ -702,7 +776,7 @@ def wire_motifs(
         if l != len(dynamics_motifs) - 1: ## wire up interaction from l+1 to l
             ## get level l+1 nodes
             (zlp1, elp1, elp1_intra, elp1_inter, Wlp1, Elp1, Rlp1_intra,
-             ERlp1_intra, Rlp1_inter, ERlp1_inter, Vlp1, Alp1) = dynamics_motifs[l + 1]
+             ERlp1_intra, Rlp1_inter, ERlp1_inter, Vlp1, Alp1, Glp1) = dynamics_motifs[l + 1]
             elp1.dmu >> Elp1.inputs  ## top-down entry
 
             ## we sum up cross-stream, top-down, & lateral pressures into z^l
@@ -720,10 +794,12 @@ def wire_motifs(
         ### adjust encoder synapses
         zlm1.zF >> Wl.pre
         el.dmu >> Wl.post
-        if use_action_syn:
-            ### adjust action-conditional synapses
+        if use_action_syn: ## adjust action-conditional synapses (optional)
             a.zF >> Al.pre
             el.dmu >> Al.post
+        ## update grid-cell driving synapses
+        grid_cells.global_code >> Gl.pre
+        el.dmu >> Gl.post
         ### adjust intra-stream prediction synapses
         zl.zF_prior >> Rl_intra.pre
         el_intra.dmu >> Rl_intra.post
@@ -738,6 +814,9 @@ def wire_motifs(
 
         zlm1 = zl
         qlm1 = ql
+
+        if l == len(dynamics_motifs) - 1:
+            zl.zF >> grid_cells.glimpse ## top-level latent code goes into grid-cells
 
     ## wiring is now completed
     ############################################################################

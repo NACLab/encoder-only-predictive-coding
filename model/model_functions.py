@@ -117,8 +117,8 @@ def viz_filters( ## block-matrix filter visualization routine
         for p in range(len(n_plot_per_row)):
             n_p = n_plot_per_row[p]
             Wsubset = Wset[sptr:sptr+n_p]
-            visualize(Wsubset, [patch_shape] * len(Wsubset), fname+f"_{p}")
+            visualize(Wsubset, [patch_shape] * len(Wsubset), fname+f"_{p}") #, contrast_by_data=True)
             sptr += n_p
     else:
-        visualize(Wset, [patch_shape] * len(Wset), fname)
+        visualize(Wset, [patch_shape] * len(Wset), fname) #, contrast_by_data=True)
 

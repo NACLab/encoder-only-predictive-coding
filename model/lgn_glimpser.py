@@ -620,7 +620,7 @@ class LGN_Glimpser():
         self.history_errors = self.history_errors.at[:, self._k].set(jnp.squeeze(energy, axis=1))
         self._k = self._k + 1 ## advance saccade counter
 
-    def step(self, action): ## obtains processed visual input given current saccade action/coordinate
+    def step(self, action, concat_as_arrays=False): ## obtains processed visual input given current saccade action/coordinate
         #yx_loc = jnp.zeros((xs_img.shape[0], 2))
         ## get current images to examine
         img_batch = self._image_batch
@@ -664,16 +664,30 @@ class LGN_Glimpser():
             )
             flat_patches.append(periphera_flat)
             patches.append(periphera)
-        ## combine patch types into one "view" ("glance")
-        #flat_patches = jnp.concat([fovea_flat, parafovea_flat, periphera_flat], axis=1)
-        flat_patches = jnp.concat(flat_patches, axis=1)
-        patches = jnp.concat(patches, axis=1)
-        #patches = jnp.concat([fovea, parafovea, periphera], axis=1)
+        out_patches = patches
+        if concat_as_arrays:
+            ## combine patch types into one "view" ("glance")
+            #flat_patches = jnp.concat([fovea_flat, parafovea_flat, periphera_flat], axis=1)
+            flat_patches = jnp.concat(flat_patches, axis=1)
+            patches = jnp.concat(patches, axis=1)
+            #patches = jnp.concat([fovea, parafovea, periphera], axis=1)
+            out_patches = flat_patches
+        else:
+            for p in range(len(out_patches)):
+                patch_p = out_patches[p]
+                if patch_p.shape == 4:
+                    patch_p = jnp.expand_dims(patch_p, axis=1)
+                out_patches[p] = patch_p
+            out_patches = jnp.concatenate(out_patches, axis=1)  ## yields 5D tensor
+            # for p in range(len(out_patches)):
+            #     print(out_patches[p].shape)
+            #     B, H, W, C = out_patches[p].shape
+            #     out_patches[p] = jnp.reshape(out_patches[p], (B, C, H, W))
 
         self._patches = patches
         self.g_step += 1 ## move glimpse counter
 
-        return flat_patches, 0., False, {}  ## format: obs(t), reward, done, {information}
+        return out_patches, 0., False, {}  ## format: obs(t), reward, done, {information}
 
     def render(self, output_dir, preserve_img_id=True, sample_idx=-1): ## NOTE: expensive function if batch_size > 1
         px, py = self.foveal_shape

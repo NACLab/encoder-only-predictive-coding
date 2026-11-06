@@ -2,7 +2,7 @@
     "modelType": "mpc",
     "hyperParameters": {
         "save_filter_seq": false,
-        "n_iter": 2000,
+        "n_iter": 8000,
         "batch_size": 200,
         "n_streams0": 6,
         "n_streams1": 6,
@@ -39,9 +39,14 @@
         "inh_scale": 1.0,
         "T": 40,
         "normalize": true,
-        "input_filter": "lgn",
+        "input_filter": "none",
         "input_scale": 1.0,
         "use_fine_grained_filter": true,
         "glimpse_policy": "deterministic"
+    },
+    "55": {
+        "modelDir": "exp_out/mpc/norb/55/",
+        "train_time_in_sec": 101.00759887695312,
+        "train_energy_in_nats": -36.78889846801758
     }
 }

@@ -2,7 +2,7 @@ import sys, getopt as gopt, optparse, time, json
 from jax import numpy as jnp, random, jit
 from ngclearn.utils.metric_utils import measure_sparsity, measure_gini_index
 from model.agent import Agent
-from model import LGN_Glimpser, LatentAggregator, MPCEncoder
+from model import LGN_Glimpser, MPCEncoder
 
 # I/O header message for this module
 msg = ("#################################################################\n"
@@ -135,7 +135,7 @@ eyeball = LGN_Glimpser(
     n_glimpses=n_glimpses,
     dxy=0.,
     glimpse_bounds=glimpse_bounds,
-    center_patches=True,
+    center_patches=False, #True,
     input_filter=input_filter,
     input_scale=input_scale,
     use_fine_grained_filter=use_fine_grained_filter, 
@@ -163,19 +163,10 @@ lat_dim = model.model.get_components("z2").n_units
 chunk_size = -1 ## TODO: use this parameter to process data from disk?
 if eyeball.images.shape[0] > 10000:
     chunk_size = 5000
-## latent code aggregator
-aggregator = LatentAggregator(
-    key,
-    mode="grid_cell",
-    compress_latents=compress_latents,
-    latent_feature_dim=lat_dim,
-    batch_size=batch_size
-)
-
 
 print(f" >>> Collecting latents over: {data_fname}")
 test_data = jnp.load(data_fname)
-print(" >>> X.shape: ", test_data.shape)
+print(" >>> X.shape: ", test_data.shape, " Data.Norm: ", jnp.linalg.norm(test_data))
 
 
 ### TODO: currently assumes number of data-points divisible by batch-size
@@ -201,7 +192,8 @@ for i in range(n_batches):
     actions = []
     z_dist = [] ## latent code distances, i.e., D(z_g-1, z_g)
     z_gm1 = None
-    for g in range(n_glimpses):
+    model.reset_scene_level_gridcells() ## clears out grid-cells of MPC model
+    for g in range(n_glimpses): ## process input scene thru series of MPC-selected glimpses
         x_g, a_g = eyeball.step_saccade(policy=glimpse_policy)
         Ng += x_g.shape[0]
 
@@ -220,14 +212,13 @@ for i in range(n_batches):
         _sparsity = jnp.sum(measure_sparsity(z_g, preserve_batch=False)) + _sparsity
         _gini = jnp.sum(measure_gini_index(z_g, preserve_batch=False)) + _gini
         #actions.append(a_g)
-        aggregator.update(z_g, a_g)
-        F = F_j + F
+
+        F = F_j + F ## track current cross-glimpse free-energy
     ## create batch of B x T (T = # glimpses, B = batch size)
     z_dist = jnp.concat(z_dist, axis=1)
     latent_distances.append(z_dist)
 
-    z_i = aggregator.compute_code()
-    aggregator.reset()
+    z_i = model.model.get_components("grid_cells").global_code.get() ## extract grid-cell scene activity codes
 
     max_val = float(jnp.maximum(max_val, jnp.max(z_i)))
     z_codes.append(z_i)

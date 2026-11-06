@@ -129,7 +129,8 @@ eyeball = LGN_Glimpser(
     n_glimpses=n_glimpses,
     dxy=0.,
     glimpse_bounds=glimpse_bounds, #0.2,
-    center_patches=True,
+    #center_patches=True,
+    center_patches=False,
     input_filter=input_filter,
     input_scale=input_scale,
     use_fine_grained_filter=use_fine_grained_filter, 
@@ -187,9 +188,10 @@ for i in range(n_iter):
 
     _sparsity = 0.
     F_i = Fint_i = 0.
+    model.reset_scene_level_gridcells() ## clears out grid-cells of MPC model
     for g in range(n_glimpses):
         x_g, a_g = eyeball.step_saccade(policy=glimpse_policy)
-        Ng += x_g.shape[0]
+        Ng += x_g[0].shape[0] #x_g.shape[0]
 
         #eyeball.render(output_dir="tmp/", sample_idx=0)
         #exit()

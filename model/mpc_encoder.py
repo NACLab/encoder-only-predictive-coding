@@ -102,8 +102,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
         threshold_scale = float(model_config.get("hyperParameters").get("threshold_scale"))
         ## random distillation target factor: < 0 disables this
         self.z_gamma = float(model_config.get("hyperParameters").get("z_gamma"))
-
-        self.use_lgn = True #False
+        self.disable_lgn = bool(model_config.get("hyperParameters").get("disable_lgn", False))
 
         n_z0 = Nz0 * n_streams0  ## full dimensionality of input
         n_z1 = Nz1 * n_streams1
@@ -142,52 +141,45 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                 )
                 Ngrid = grid_cells.n_units
 
-                if not self.use_lgn:
-                    z0 = RateCell(  ## z0
-                        name="z0",
-                        tau_m=0.,
-                        n_units=Nz0 * n_streams1,
-                        batch_size=batch_size
-                    )
-                else:
-                    ##
-                    lgn_config = {
-                        "sigma_center": 0.8,
-                        "sigma_surround": 2.0,
-                        "kernel_size": 6,
-                        "semi_sat_constant": 0.075,
-                        "excitation_exp": 1.0,
-                        "inhibition_exp": 1.0,
-                        "mode": "reflect"
-                    }
-                    ## un-natural image (e.g., MNIST) saliency config
-                    lgn_config = {
-                        "sigma_center": 0.35,  ## sharpen the center; target pixel-level edges
-                        "sigma_surround": 0.75,  ## pull in the inhibition window tightly
-                        "kernel_size": 3,  #
-                        "semi_sat_constant": 0.25,  ## raise to suppress background noise amplification
-                        "excitation_exp": 1.2,  ## sparsification - boost strong edges, crush weak ones
-                        "inhibition_exp": 1.0,
-                        "mode": "constant"  ## zero-pad since un-natural image backgrounds are generally zero
-                    }
-                    ##
+                # if not self.use_lgn:
+                #     z0 = RateCell(  ## z0
+                #         name="z0",
+                #         tau_m=0.,
+                #         n_units=Nz0 * n_streams1,
+                #         batch_size=batch_size
+                #     )
+                # else:
+                ##
+                lgn_config = {
+                    "sigma_center": 0.8,
+                    "sigma_surround": 2.0,
+                    "kernel_size": 6,
+                    "semi_sat_constant": 0.075,
+                    "excitation_exp": 1.0,
+                    "inhibition_exp": 1.0,
+                    "mode": "reflect"
+                }
+                ## un-natural image (e.g., MNIST) saliency config
+                lgn_config = {
+                    "sigma_center": 0.35,  ## sharpen the center; target pixel-level edges
+                    "sigma_surround": 0.75,  ## pull in the inhibition window tightly
+                    "kernel_size": 3,  #
+                    "semi_sat_constant": 0.25,  ## raise to suppress background noise amplification
+                    "excitation_exp": 1.2,  ## sparsification - boost strong edges, crush weak ones
+                    "inhibition_exp": 1.0,
+                    "mode": "constant"  ## zero-pad since un-natural image backgrounds are generally zero
+                }
+                ##
 
-                    # Assume 'my_glimpser_list' is a list of length P containing (B, C, H, W) arrays
-                    px0 = int(math.sqrt(Nz0)) ## patches assumed to be square (H=W)
-                    z0 = LGNUnitCell( #lgn_layer
-                        name="z0",
-                        n_patches=n_streams1, #144,
-                        patch_shape=(1, px0, px0), ## only 1 channel (C=1)
-                        batch_size=batch_size
-                    )
-                    '''
-                    # 1. Pipe the list into the cell (performs the structural JAX stacking)
-                    lgn_layer.inputs_from_list(my_glimpser_list)
-                    # 2. Advance the state (computes parallel convolving and divisive normalizations)
-                    lgn_layer.advance_state(dt=1.0)
-                    # 3. Pull the flattened form to drive your V1 cortical layer!
-                    v1_driving_matrix = lgn_layer.y_flat.get()  # Shape: (200, 144 * 1 * 14 * 14) = (200, 28224)
-                    '''
+                # Assume 'my_glimpser_list' is a list of length P containing (B, C, H, W) arrays
+                px0 = int(math.sqrt(Nz0)) ## patches assumed to be square (H=W)
+                z0 = LGNUnitCell( #lgn_layer
+                    name="z0",
+                    n_patches=n_streams1, #144,
+                    patch_shape=(1, px0, px0), ## only 1 channel (C=1)
+                    batch_size=batch_size,
+                    disable_lgn_filtering=self.disable_lgn
+                )
 
                 ## build motif for layer z1
                 hyperparams1 = (

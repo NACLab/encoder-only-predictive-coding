@@ -34,6 +34,7 @@ class LGNUnitCell(JaxComponent):  ## approximate LGN cell-units
             inhibition_exp=1.0,  ## shunting pool normalization exponent
             combine_onoff_codes=True, ## if True, results in a contrast-map
             baseline=0.0,
+            disable_lgn_filtering=False, ## if True, disables LGN/retinal ganglion processing logic
             **kwargs
     ):
         super().__init__(name, **kwargs)
@@ -51,7 +52,8 @@ class LGNUnitCell(JaxComponent):  ## approximate LGN cell-units
         self.inhibition_exp = inhibition_exp
         self.combine_onoff_codes = combine_onoff_codes
         self.baseline = baseline
-        self.center_outputs = True
+        self.disable_lgn_filtering = disable_lgn_filtering
+        self.center_outputs = True ## performs local output centering (subtracts mean of the maps out)
 
         ## unpack structural channel dimensions
         C, H, W = patch_shape
@@ -81,51 +83,55 @@ class LGNUnitCell(JaxComponent):  ## approximate LGN cell-units
         P = self.n_patches
         C, H, W = self.patch_shape
 
-        ## flatten patch and batch dimensions into single axis (B * P, C, H, W);
-        ## apply explicit boundary protection mode choice
-        padded_x = jnp.pad(
-            images_5d.reshape(B * P, C, H, W),
-            ((0, 0), (0, 0), (self.kernel_size, self.kernel_size), (self.kernel_size, self.kernel_size)),
-            mode=self.mode
-        )
+        if self.disable_lgn_filtering:  ## short-circuit input stimuli to outputs
+            effective_response = images_5d
+        else: ## else, emulate LGN
+            ## flatten patch and batch dimensions into single axis (B * P, C, H, W);
+            ## apply explicit boundary protection mode choice
+            padded_x = jnp.pad(
+                images_5d.reshape(B * P, C, H, W),
+                ((0, 0), (0, 0), (self.kernel_size, self.kernel_size), (self.kernel_size, self.kernel_size)),
+                mode=self.mode
+            )
 
-        ## setup kernels
-        k1 = _calc_gaussian_kernel_2D(self.sigma_center, self.kernel_size)
-        k2 = _calc_gaussian_kernel_2D(self.sigma_surround, self.kernel_size)
-        dn = lax.ConvDimensionNumbers(
-            lhs_spec=(0, 1, 2, 3), rhs_spec=(0, 1, 2, 3), out_spec=(0, 1, 2, 3)
-        )
+            ## setup kernels
+            k1 = _calc_gaussian_kernel_2D(self.sigma_center, self.kernel_size)
+            k2 = _calc_gaussian_kernel_2D(self.sigma_surround, self.kernel_size)
+            dn = lax.ConvDimensionNumbers(
+                lhs_spec=(0, 1, 2, 3), rhs_spec=(0, 1, 2, 3), out_spec=(0, 1, 2, 3)
+            )
 
-        ## apply spatial blur extraction (via independent depthwise XLA convolution)
-        blur_center = lax.conv_general_dilated(
-            padded_x, k1, window_strides=(1, 1), padding='VALID', dimension_numbers=dn, feature_group_count=C
-        )
-        blur_surround = lax.conv_general_dilated(
-            padded_x, k2, window_strides=(1, 1), padding='VALID', dimension_numbers=dn, feature_group_count=C
-        )
+            ## apply spatial blur extraction (via independent depthwise XLA convolution)
+            blur_center = lax.conv_general_dilated(
+                padded_x, k1, window_strides=(1, 1), padding='VALID', dimension_numbers=dn, feature_group_count=C
+            )
+            blur_surround = lax.conv_general_dilated(
+                padded_x, k2, window_strides=(1, 1), padding='VALID', dimension_numbers=dn, feature_group_count=C
+            )
 
-        ## produce ON stream pathway
-        rectified_center_on = jnp.maximum(0.0, blur_center)
-        rectified_surround_on = jnp.maximum(0.0, blur_surround)
-        num_on = jnp.power(rectified_center_on, self.excitation_exp)
-        den_on = jnp.power(rectified_surround_on, self.inhibition_exp) + (self.semi_sat_constant ** 2)
-        on_stream = num_on / den_on
+            ## produce ON stream pathway
+            rectified_center_on = jnp.maximum(0.0, blur_center)
+            rectified_surround_on = jnp.maximum(0.0, blur_surround)
+            num_on = jnp.power(rectified_center_on, self.excitation_exp)
+            den_on = jnp.power(rectified_surround_on, self.inhibition_exp) + (self.semi_sat_constant ** 2)
+            on_stream = num_on / den_on
 
-        ## produce OFF stream pathway
-        rectified_center_off = jnp.maximum(0.0, blur_surround)
-        rectified_surround_off = jnp.maximum(0.0, blur_center)
-        num_off = jnp.power(rectified_center_off, self.excitation_exp)
-        den_off = jnp.power(rectified_surround_off, self.inhibition_exp) + (self.semi_sat_constant ** 2)
-        off_stream = num_off / den_off
-        ## inject background baseline parameters (neural "noise")
-        on_stream = on_stream + self.baseline
-        off_stream = off_stream + self.baseline
+            ## produce OFF stream pathway
+            rectified_center_off = jnp.maximum(0.0, blur_surround)
+            rectified_surround_off = jnp.maximum(0.0, blur_center)
+            num_off = jnp.power(rectified_center_off, self.excitation_exp)
+            den_off = jnp.power(rectified_surround_off, self.inhibition_exp) + (self.semi_sat_constant ** 2)
+            off_stream = num_off / den_off
+            ## inject background baseline parameters (neural "noise")
+            on_stream = on_stream + self.baseline
+            off_stream = off_stream + self.baseline
 
-        ## channel combination / routing
-        if self.combine_onoff_codes:
-            effective_response = on_stream - off_stream ## output is a contrast "map"
-        else:
-            effective_response = jnp.concatenate([on_stream, off_stream], axis=1) ## output concats on/off channels
+            ## channel combination / routing
+            if self.combine_onoff_codes:
+                effective_response = on_stream - off_stream ## output is a contrast "map"
+            else:
+                effective_response = jnp.concatenate([on_stream, off_stream], axis=1) ## output concats on/off channels
+
         if self.center_outputs: ## apply local centering (ensuring zero-mean output maps)
             effective_response = effective_response - jnp.mean(effective_response, axis=[2, 3], keepdims=True)
 

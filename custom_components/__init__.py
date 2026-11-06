@@ -4,5 +4,3 @@ from .foldiakSynapse import FoldiakSynapse
 from .gaussianErrorCell import GaussianErrorCell
 from .lgnUnitCell import LGNUnitCell
 from .gridRateCell import GridRateCell
-#from .tensorOjaSynapse import TensorOjaSynapse
-

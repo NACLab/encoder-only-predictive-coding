@@ -254,7 +254,7 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                     evolve_chain = evolve_chain + [R1_inter, R2_inter]
                     reset_chain = reset_chain + [e1_inter, e2_inter, R1_inter, R2_inter, ER1_inter, ER2_inter]
 
-                ## Set up command flow (processes)
+                ## set up command flow (processes)
                 self.evolve = MethodProcess("evolve_proc")
                 for node in evolve_chain:
                     self.evolve >> node.evolve

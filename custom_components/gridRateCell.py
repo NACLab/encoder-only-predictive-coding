@@ -8,9 +8,8 @@ from ngclearn.components.jaxComponent import JaxComponent
 
 class GridRateCell(JaxComponent):
     """
-    GridRateCell: Rate-coded grid cells performing Entorhinal-Hippocampal coordinate mapping
+    Rate-coded grid cell(s) performing Entorhinal-Hippocampal coordinate mapping
     under a multi-scale Fourier basis.
-
     This component acts as an online global "sketch-pad", continuously aggregating local
     sensory glimpses and spatial coordinates into a unified, phase-locked macro-representation.
     """
@@ -19,7 +18,7 @@ class GridRateCell(JaxComponent):
             self,
             name,
             latent_feature_dim,
-            num_frequencies=6,
+            num_frequencies=6, ## 6 is a good default
             batch_size=1,
             **kwargs
     ):
@@ -30,8 +29,8 @@ class GridRateCell(JaxComponent):
         self.num_frequencies = num_frequencies
         self.grid_dims = 2 * num_frequencies * 2
 
-        # Calculate the fixed, exact dimensionality of the concatenated global macro-code
-        # [mean_code (D) + std_code (D) + grid_centroids_flat (D * grid_dims)]
+        ## calculate the fixed, exact dimensionality of the concatenated global macro-code
+        ## [mean_code (D) + std_code (D) + grid_centroids_flat (D * grid_dims)]
         self.global_code_dim = self.n_units = latent_feature_dim + latent_feature_dim + (latent_feature_dim * self.grid_dims)
         self.shape = (self.global_code_dim,)
 
@@ -75,62 +74,57 @@ class GridRateCell(JaxComponent):
 
     @compilable
     def advance_state(self, dt):
-        # Processes the current step inputs (glimpse and coordinate) to update internal
-        # rate-coded synaptic traces and project the newly mutated global sketch-pad vector
+        ## processes the current step inputs (glimpse + coordinate) to update internal
+        ### rate-coded synaptic traces and project the newly mutated global sketch-pad vector
 
-        ## Gather current inputs and historical state traces
+        ## gather current inputs + state traces
         glimpse_t = self.glimpse.get()
         coord_t = self.coordinate.get()
-
         k_prev = self.k.get()
         sum_f_prev = self.sum_features.get()
         sum_sq_f_prev = self.sum_sq_features.get()
         sum_w_prev = self.sum_weights.get()
         centroids_prev = self.running_centroids.get()
 
-        ## Increment step counters and basic statistics
+        ## increment step counters (and update running statistics)
         k_curr = k_prev + 1.0
         sum_f_curr = sum_f_prev + glimpse_t
         sum_sq_f_curr = sum_sq_f_prev + (glimpse_t ** 2)
 
-        ## Construct spatial Fourier phases (Grid Module Scales)
+        ## construct spatial Fourier phases (grid module scales)
         powers = jnp.arange(self.num_frequencies, dtype=jnp.float32)
         frequencies = (2.0 ** powers) * jnp.pi  # Shape: (num_frequencies,)
 
-        # Broadcast spatial vectors against the geometric frequency scaling modules
+        ## broadcast spatial vectors against frequency scaling modules
         phase_angles = coord_t[..., None] * frequencies
         sin_phases = jnp.sin(phase_angles)
         cos_phases = jnp.cos(phase_angles)
-
-        # Flatten coordinate representation into a clean, uniform periodic grid-basis vector
+        ## flatten coordinate representation into uniform periodic grid-basis vector
         grid_coordinate_step = jnp.concatenate([sin_phases, cos_phases], axis=-1).reshape(
             (coord_t.shape[0], self.grid_dims)
         )
 
-        ## Perform conjunctive feature gating (Feature-locked Grid-Cell Phase-Centroids)
+        ## perform conjunctive feature gating (feature-locked grid-cell phase-centroids)
         feature_weight_step = jnp.abs(glimpse_t)
         sum_w_curr = sum_w_prev + feature_weight_step
-
-        # Outer product to bind identity ("what") to the structural coordinate manifold ("where")
+        ## NOTE: outer product to bind identity ("what") to coordinate manifold ("where")
         centroid_update = feature_weight_step[..., None] * grid_coordinate_step[:, None, :]
         centroids_curr = centroids_prev + centroid_update
 
-        ## Extract analytical descriptive metrics
+        ## extract analytical descriptive metrics
         mean_code = sum_f_curr / k_curr
         var_code = jnp.maximum((sum_sq_f_curr / k_curr) - (mean_code ** 2), 0.0)
         std_code = jnp.sqrt(var_code)
-
-        # Normalize the phase tensor using cumulative structural step weights
+        ## normalize phase tensor using cumulative structural step weights
         grid_centroids = centroids_curr / (sum_w_curr[..., None] + 1e-8)
         grid_centroids_flat = grid_centroids.reshape((glimpse_t.shape[0], -1))
 
-        ## Apply global predictive-coding standard L2 normalizations
+        ## apply global predictive-coding standard L2 normalizations
         mean_code = mean_code / (jnp.linalg.norm(mean_code, axis=-1, keepdims=True) + 1e-8)
         std_code = std_code / (jnp.linalg.norm(std_code, axis=-1, keepdims=True) + 1e-8)
         grid_centroids_flat = grid_centroids_flat / (
                     jnp.linalg.norm(grid_centroids_flat, axis=-1, keepdims=True) + 1e-8)
-
-        ## Assemble unified global structural descriptor vector
+        ## assemble unified global structural descriptor vector
         global_code_curr = jnp.concatenate([mean_code, std_code, grid_centroids_flat], axis=-1)
 
         ## Mutate internal state compartments safely
@@ -143,21 +137,18 @@ class GridRateCell(JaxComponent):
 
     @compilable
     def reset(self):
-        # Wipes sketch-pad and clears all accumulators back to baseline resting potentials,
-        # preparing the component for a completely new visual scanning/glimpising session
-
-        ## Clear transient step inputs if they are not bound directly as targets
+        ## wipe sketch-pad and clear all accumulators back to baseline resting potentials
+        ### clear transient step inputs if they are not bound directly as targets
         if not self.glimpse.targeted:
             self.glimpse.set(jnp.zeros((self.batch_size, self.latent_feature_dim)))
         if not self.coordinate.targeted:
             self.coordinate.set(jnp.zeros((self.batch_size, 2)))
 
-        ## Clear historical state traces
+        ## clear historical state traces
         self.k.set(jnp.zeros((self.batch_size, 1)))
         self.sum_features.set(jnp.zeros((self.batch_size, self.latent_feature_dim)))
         self.sum_sq_features.set(jnp.zeros((self.batch_size, self.latent_feature_dim)))
         self.sum_weights.set(jnp.zeros((self.batch_size, self.latent_feature_dim)))
         self.running_centroids.set(jnp.zeros((self.batch_size, self.latent_feature_dim, self.grid_dims)))
-
-        ## Clear macro-representation readout
+        ## clear macro-representation readout
         self.global_code.set(jnp.zeros((self.batch_size, self.global_code_dim)))

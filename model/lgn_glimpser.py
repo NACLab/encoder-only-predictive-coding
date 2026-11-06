@@ -3,8 +3,6 @@ import jax
 from jax import numpy as jnp, random, nn, jit, lax
 from functools import partial as bind
 from ngclearn.utils.viz.synapse_plot import visualize
-from ngclearn.utils.filters import gaussian_filter, cortical_gaussian_filter as cortical_filter
-from .lgn_utils import lgn_map_filter
 
 ############# LGN patch-processing co-routines #############
 
@@ -121,7 +119,7 @@ def rescale(x, a=-1., b=1.):
 def _get_bottom_up_salience(
     subtracted_lgn_image: jnp.ndarray, sigma=8.0
 ) -> jnp.ndarray:
-    """Computes baseline bottom-up structural salience from the LGN filter."""
+    ## computes baseline bottom-up structural salience from the LGN filter
     energy = jnp.sum(jnp.abs(subtracted_lgn_image), axis=0)
     radius = int(sigma * 3)
     if radius % 2 == 0: radius += 1
@@ -303,8 +301,6 @@ class LGN_Glimpser():
         dxy:
         center_patches:
         patch_stat_type:
-        filter_type:
-            :Note: supported filters include - "difference_of_gaussians", "ratio_of_gaussians"
 
     """
 
@@ -321,9 +317,7 @@ class LGN_Glimpser():
             dxy=0.15, ## glimpse/glance differential
             center_patches=False,
             patch_stat_type=0,
-            input_filter:str=None, ## apply diff-of-gauss filter to sampled images?
             input_scale:float=1., ## post-image scale factor to apply before extracting patches
-            use_fine_grained_filter=True,
             max_saccades=10,
             **kwargs
     ):
@@ -338,36 +332,10 @@ class LGN_Glimpser():
         self.foveal_shift = 0.25 #0.3
         self.center_patches = center_patches
         self.max_saccades = max_saccades
-
+        ## glimpser config (affects patch extraction geometry)
         self.glimpse_setup = 1 ## 0 or 1
 
-        self.filter_inhibition = 0.
         self.input_scale = input_scale
-        self.apply_filter = False
-        self.use_ratio_filter = False
-        self.use_fine_grained_filter = use_fine_grained_filter
-        self.filter_fx = gaussian_filter
-        self.input_filter = input_filter
-        if input_filter == "difference_of_gaussians" or input_filter == "DoG":
-            print(">> Applying DoG filter!")
-            self.apply_filter = True
-        elif input_filter == "ratio_of_gaussians" or input_filter == "RoG":
-            print(">> Applying RoG filter!")
-            self.apply_filter = self.use_ratio_filter = True
-        elif input_filter == "cortical_DoG":
-            print(">> Applying Cortical-DoG filter")
-            self.apply_filter = True
-            self.filter_fx = cortical_filter
-        elif input_filter == "cortical_RoG":
-            print(">> Applying Cortical-RoG filter")
-            self.apply_filter = self.use_ratio_filter = True
-            self.filter_fx = cortical_filter
-        elif "lgn" in input_filter: ## most cortically-realistic
-            print(">> Applying LGN filter")
-            self.apply_filter = self.use_ratio_filter = True
-            self.filter_fx = lgn_map_filter
-            self.filter_inhibition = 0. #0.00005 #0.00015 # 0. # 0.005 ## 0.85
-
         self.normalize_patches = False
         self.stat_type = patch_stat_type ## 0, 1, 2
         if center_patches:
@@ -458,7 +426,7 @@ class LGN_Glimpser():
         self.error_spread_sigma = 7.5 #10.0 #5.0
         self.top_down_weight = 0.5 #0.3 #0.4
 
-        ## foraging book-keeping variables
+        ## foraging bookkeeping variables
         self.history_coords = jnp.zeros((self.batch_size, self.max_saccades, 2)) ## (B, max_saccades, 2)
         self.history_errors = jnp.zeros((self.batch_size, self.max_saccades)) ## (B, max_saccades)
         self.history_mask = jnp.zeros((self.batch_size, self.max_saccades)) ## (B, max_saccades)
@@ -471,62 +439,8 @@ class LGN_Glimpser():
         img_batch = self.images[batch_ptrs, :]
         px, py = self.image_shape
         self._xy_batch = jnp.zeros((batch_size, 2))
-        self._image_batch = jnp.reshape(img_batch, (img_batch.shape[0], 1, px, py))
-
-        if self.apply_filter:
-            self._image_batch = jnp.reshape(img_batch, (img_batch.shape[0], 1, px, py))
-            if "lgn" in self.input_filter:
-                ## natural-image (e.g., NORB) saliency config
-                lgn_config = {
-                    "sigma_center": 0.8,
-                    "sigma_surround":2.0,
-                    "kernel_size": 6,
-                    "semi_sat_constant": 0.075,
-                    "excitation_exp": 1.0,
-                    "inhibition_exp": 1.0,
-                    "mode": "reflect"
-                }
-                if "mnist" in self.dataset_name:
-                    ## un-natural image (e.g., MNIST) saliency config
-                    lgn_config = {
-                        "sigma_center": 0.35,  ## sharpen the center; target pixel-level edges
-                        "sigma_surround": 0.75,  ## pull in the inhibition window tightly
-                        "kernel_size": 3,  #
-                        "semi_sat_constant": 0.25,  ## raise to suppress background noise amplification
-                        "excitation_exp": 1.2,  ## sparsification - boost strong edges, crush weak ones
-                        "inhibition_exp": 1.0,
-                        "mode": "constant"  ## zero-pad since un-natural image backgrounds are generally zero
-                    }
-                s1 = lgn_config["sigma_center"]
-                s2 = lgn_config["sigma_surround"]
-                kw = lgn_config["kernel_size"]
-                excitation_exp = lgn_config["excitation_exp"]
-                inhibition_exp = lgn_config["inhibition_exp"]
-                mode = lgn_config["mode"]
-            else:
-                kw = 4
-                if self.use_fine_grained_filter:
-                    s1, s2 = 1.0, 1.6 ## finer-grained filter
-                else:
-                    s1, s2 = 1.0, 5.0 ## coarse-grained filter
-            ## run actual filter over image batch
-            self._image_batch = self.filter_fx( #gaussian_filter(
-                self._image_batch,
-                sigma_center=s1,
-                sigma_surround=s2,
-                kernel_size=kw, ## Kernel radius (kernel window size is 2*r + 1)
-                use_ratio=self.use_ratio_filter,
-                excitation_exp=excitation_exp,
-                inhibition_exp=inhibition_exp,
-                baseline=0.,
-                mode=mode, 
-                post_lateral_inhibition_strength=self.filter_inhibition
-            )
-            B, C, H, W = self._image_batch.shape ## pull out filtered batch shape
-            self._image_batch = jnp.transpose(self._image_batch, (0, 2, 3, 1))
-            #self._image_batch = jnp.expand_dims(jnp.squeeze(self._image_batch, axis=1), axis=3)
-        else:
-            self._image_batch = jnp.reshape(img_batch, (img_batch.shape[0], px, py, 1))
+        #self._image_batch = jnp.reshape(img_batch, (img_batch.shape[0], 1, px, py))
+        self._image_batch = jnp.reshape(img_batch, (img_batch.shape[0], px, py, 1)) ## images -> (B, H, W, C)
         self._image_batch = self._image_batch * self.input_scale # xsc
 
     def step_epistemic_saccade(self, temperature_schedule="none"):

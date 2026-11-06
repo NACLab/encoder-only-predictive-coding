@@ -150,6 +150,28 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
                         batch_size=batch_size
                     )
                 else:
+                    ##
+                    lgn_config = {
+                        "sigma_center": 0.8,
+                        "sigma_surround": 2.0,
+                        "kernel_size": 6,
+                        "semi_sat_constant": 0.075,
+                        "excitation_exp": 1.0,
+                        "inhibition_exp": 1.0,
+                        "mode": "reflect"
+                    }
+                    ## un-natural image (e.g., MNIST) saliency config
+                    lgn_config = {
+                        "sigma_center": 0.35,  ## sharpen the center; target pixel-level edges
+                        "sigma_surround": 0.75,  ## pull in the inhibition window tightly
+                        "kernel_size": 3,  #
+                        "semi_sat_constant": 0.25,  ## raise to suppress background noise amplification
+                        "excitation_exp": 1.2,  ## sparsification - boost strong edges, crush weak ones
+                        "inhibition_exp": 1.0,
+                        "mode": "constant"  ## zero-pad since un-natural image backgrounds are generally zero
+                    }
+                    ##
+
                     # Assume 'my_glimpser_list' is a list of length P containing (B, C, H, W) arrays
                     px0 = int(math.sqrt(Nz0)) ## patches assumed to be square (H=W)
                     z0 = LGNUnitCell( #lgn_layer
@@ -296,13 +318,6 @@ class MPCEncoder(Agent): ## model-builder for proposed MPC (this sub-classes the
     def process(self, x, action=None, adapt_synapses=False):
 
         x_data = x
-        # if self.use_lgn: ## LGN
-        #     #print(x_data[0].shape, " ", len(x_data))
-        #     #x_data = jnp.stack(x_data, axis=1) ## yields 5D tensor
-        #     print(x_data.shape)
-        #     exit()
-        # else: ## no LGN
-        #     x_data = jnp.concat(x_data, axis=1) ## yields concatenated 4D tensor
 
         self.reset.run()  # batch_size=x.shape[0])
         ## get input nodes

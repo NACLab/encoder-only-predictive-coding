@@ -5,7 +5,7 @@ DATASET=norb ## dataset to use for simulation
 MODEL=mpc ## model-type to simulate
 CONFIG=configs/norb_mpc.json ## model config file (JSON)
 EXP_DIR=exp_out/
-DATA_DIR=../representational-pc/data/
+DATA_DIR=data/
 TRAIN_MODEL=1 ## 1 = train model, 0 = do not train model
 COLLECT_LATENTS=1 ## 1 = collect latents, 0 = do not collect latents
 DO_KNN_PROBE=1 ## do KNN probe?

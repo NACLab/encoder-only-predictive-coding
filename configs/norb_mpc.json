@@ -43,10 +43,5 @@
         "input_scale": 1.0,
         "use_fine_grained_filter": true,
         "glimpse_policy": "deterministic"
-    },
-    "55": {
-        "modelDir": "exp_out/mpc/norb/55/",
-        "train_time_in_sec": 101.00759887695312,
-        "train_energy_in_nats": -36.78889846801758
     }
 }

@@ -39,9 +39,11 @@
         "inh_scale": 1.0,
         "T": 40,
         "normalize": true,
-        "input_filter": "none",
         "input_scale": 1.0,
-        "use_fine_grained_filter": true,
+        "disable_lgn": false,
         "glimpse_policy": "deterministic"
+    },
+    "55": {
+        "modelDir": "exp_out/mpc/norb/55/"
     }
 }

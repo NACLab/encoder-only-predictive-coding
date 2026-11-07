@@ -5,17 +5,17 @@ This is the supporting code for the paper
 "Meta-Representational Predictive Coding: Neuroscience-Informed Self-Supervised Learning"
 </a> (Ororbia, Friston, Rao, 2025). <br>
 Note that this code was written on/run on an Ubuntu 22.04.2 LTS and 
-assumes that you have Python 3.10.12, jax/jaxlib 0.4.28 (for Cuda-12), and 
-ngclearn 3.1.0 (with ngcsimlib 3.1.0) successfully installed on your system.
+assumes that you have Python 3.12.16, jax/jaxlib >=0.11.1 (for Cuda-12), and 
+ngclearn 3.2.4 (with ngcsimlib 3.1.1) successfully installed on your system. 
 
 ## Installation
 
-If you have Python 3.10.12 installed, you can automatically configure the needed dependencies 
+If you have Python 3.12.16 installed, you can automatically configure the needed dependencies 
 via pip. It is recommended that you first create a separate Python virtual environment (VM) to 
 act as a playground for this code (and protect your working environment) like so:
 
 ```consolve
-python3.10 -m venv env_mpc  ## create a playground VM
+python3.12 -m venv env_mpc  ## create a playground VM
 source env_mpc/bin/activate  ## activate/enter the playground VM
 ```
 
@@ -34,13 +34,13 @@ In order to run the simulation, make sure you unzip the mnist data prepared for 
 the `/data/` folder (unzip `/data/mnist.zip` and place it inside of `/data/`).
 To train an MPC circuit model on MNIST, run the following prepared BASH script:
 ```console
-./exec_mnist.sh
+./exec_mnist.sh 
 ```
 
-To train an MPC circuit model on small NORB  (unzip `/data/norb.zip` and place it inside of `/data/`)., run the following 
+To train an MPC circuit model on small NORB  (run the fetch-script below to ensure it exists w/in `/data/`)., run the following 
 prepared BASH script:
 ```console
-./exec_norb.sh
+./exec_norb.sh 
 ```
 
 <i>Note</i>: To use (small) Norb, you either want to re-use/re-purpose your current arrays or use the optional 
